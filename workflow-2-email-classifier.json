@@ -1,0 +1,438 @@
+{
+  "name": "Job Application Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are parsing emails for a job application tracker.\nYou MUST return ONLY this exact JSON structure, nothing else:\n{\"status\": \"Applied\", \"company\": \"Company Name\"}\n\nRules:\n- \"status\" must be EXACTLY one of: \"Applied\", \"Interview\", \"Rejected\", \"other\", \"not_relevant\"\n- \"company\" must be a string or null\n- Do NOT add any other fields\n- Do NOT nest the JSON\n- Do NOT use \"category\", \"job_related\", \"company_name\", \"email_id\" or any other field names\n- Do NOT wrap in markdown\n\nStatus definitions:\n- \"Applied\" → confirms application was received\n- \"Interview\" → invites to an interview\n- \"Rejected\" → any form of rejection\n- \"other\" → job-related but cannot be classified above\n- \"not_relevant\" → nothing to do with a job application\n\nEmail subject: {{ $json.Subject }}\nEmail body: {{ $json.snippet }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        176
+      ],
+      "id": "ae63d42f-ab30-4af2-b274-ae7ac9d74444",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "lYumNAqaVFKZwBga",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nconst allItems = $input.all();\nconst gmailItems = $('Get many messages').all();\n\nfor (let i = 0; i < allItems.length; i++) {\n  const openAIItem = allItems[i];\n  const gmailItem = gmailItems[i] || gmailItems[0];\n\n  let raw = openAIItem.json.output[0].content[0].text;\n  raw = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\n  let parsed;\n  try {\n    parsed = JSON.parse(raw);\n  } catch(e) {\n    parsed = { status: 'other', company: null };\n  }\n\n  const validStatuses = ['Applied', 'Interview', 'Rejected', 'other', 'not_relevant'];\n  const status = validStatuses.includes(parsed.status) ? parsed.status : 'other';\n  const company = parsed.company || '';\n\n  results.push({\n    json: {\n      status: status,\n      company: company,\n      email_subject: gmailItem.json.Subject || '',\n      email_from: gmailItem.json.From || '',\n      email_snippet: gmailItem.json.snippet || ''\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        176
+      ],
+      "id": "aaa78917-0c8a-462a-ac1e-bf21357422b5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0e686b33-09e5-4714-8efe-ade37dbf2fc1",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "=other",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        176
+      ],
+      "id": "672b72be-b26b-4264-afe4-ee0d8709f342",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "343aa419-52b9-809b-9739-e489dca12914",
+          "mode": "list",
+          "cachedResultName": "Applications",
+          "cachedResultUrl": "https://www.notion.so/343aa41952b9809b9739e489dca12914"
+        },
+        "limit": 1,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Company|rich_text",
+              "condition": "contains",
+              "richTextValue": "={{ $json.company }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1424,
+        80
+      ],
+      "id": "19b469eb-e8ab-46f9-925c-786e7461408d",
+      "name": "Get many database pages",
+      "credentials": {
+        "notionApi": {
+          "id": "QGkRTGyCuiv21kyQ",
+          "name": "Notion account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $('Get many database pages').item.json.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Application Status|select",
+              "selectValue": "={{ $('Code in JavaScript').item.json.status }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1648,
+        80
+      ],
+      "id": "d4c1aa37-c312-46c5-ab86-d2ce1cdcef42",
+      "name": "Update a database page",
+      "credentials": {
+        "notionApi": {
+          "id": "QGkRTGyCuiv21kyQ",
+          "name": "Notion account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1v90Q_cb5doNGPaJtfpZjwAF6sIw4qNf6gYqRL7a_aLw",
+          "mode": "list",
+          "cachedResultName": "n8n_job_tracker_log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1v90Q_cb5doNGPaJtfpZjwAF6sIw4qNf6gYqRL7a_aLw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1v90Q_cb5doNGPaJtfpZjwAF6sIw4qNf6gYqRL7a_aLw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Logged At": "={{ $now }}",
+            "From": "={{ $json.email_from }}",
+            "Subject": "={{ $json.email_subject }}",
+            "Snippet": "={{ $json.email_snippet }}",
+            "Classification": "={{ $('Code in JavaScript').item.json.status }}"
+          },
+          "matchingColumns": [
+            "n8n"
+          ],
+          "schema": [
+            {
+              "id": "Logged At",
+              "displayName": "Logged At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "From",
+              "displayName": "From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Snippet",
+              "displayName": "Snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Classification",
+              "displayName": "Classification",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1424,
+        272
+      ],
+      "id": "a6c40482-4038-41ca-97b6-79a80dd46737",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "we2t3ymKFeefz1fF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 12
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        176
+      ],
+      "id": "15df30d3-5d6e-4f03-a6f0-37bbb08cfc2a",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {
+          "includeSpamTrash": true,
+          "readStatus": "both"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        176
+      ],
+      "id": "8526b6f8-e633-4c13-afd6-2740beb4b8d9",
+      "name": "Get many messages",
+      "webhookId": "5cc2059d-6844-45a6-b9b9-984d99c6be9b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Q33HNPQUD6YEJzLV",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "998a376d-431f-4b6f-8b93-2910c7472a5c",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "not_relevant",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        176
+      ],
+      "id": "106a2695-f7d0-4bb9-a5d7-a9eb310a58ac",
+      "name": "Filter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get many database pages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many database pages": {
+      "main": [
+        [
+          {
+            "node": "Update a database page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c2a1edfd-99a1-43a6-bdaf-8179b1a1aa56",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0bf52a519ee0e97c6deae6f9544eafe41cbbc3f96936b07985df0f5239bd6182"
+  },
+  "id": "sDxKWMcM5ohKTeRX",
+  "tags": []
+}
