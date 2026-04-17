@@ -30,10 +30,14 @@ Two connected workflows that automate the job search process end to end:
 Workflow 1:
 
 n8n Form → OpenAI (tailor resume) → Merge → Notion (create row)
+<img width="1707" height="861" alt="image" src="https://github.com/user-attachments/assets/0f70c727-9c67-42f6-90cb-ca28c7c16613" />
+
 
 Workflow 2:
 
 Schedule Trigger → Gmail (get emails) → OpenAI (classify) → Code (parse)
+<img width="1709" height="860" alt="image" src="https://github.com/user-attachments/assets/1fe7b08c-3291-408a-a5eb-5cf81aac3545" />
+
 
 → Filter (drop irrelevant) → IF → Notion (update status)
 
